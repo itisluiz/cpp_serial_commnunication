@@ -6,8 +6,10 @@ namespace serial
 	#pragma region SerialConfig class implementation
 
 	// Constructors and destructor
-	SerialConfig::SerialConfig(BYTE byteSize, BYTE parity, BYTE stopBits)
-		: m_byteSize{ byteSize }, m_parity{ parity }, m_stopBits{ stopBits } {}
+	SerialConfig::SerialConfig(const BYTE byteSize, const BYTE parity, const BYTE stopBits): 
+		m_byteSize{ (byteSize >= 4 && byteSize <= 8) ? byteSize : static_cast<BYTE>(8)  },
+		m_parity{ (parity <= SPACEPARITY) ? parity : static_cast<BYTE>(NOPARITY) },
+		m_stopBits{ (stopBits <= TWOSTOPBITS) ? stopBits : static_cast<BYTE>(ONESTOPBIT) } {}
 
 	SerialConfig::SerialConfig(const char* convNotation)
 	{
@@ -46,10 +48,23 @@ namespace serial
 
 	}
 
+	SerialConfig::SerialConfig(const BYTE arduinoPreset)
+	{
+		this->m_byteSize = 5 + (arduinoPreset % 0x08) / 2;
+		this->m_stopBits = (arduinoPreset % 0x10 <= 0x6) ? ONESTOPBIT : TWOSTOPBITS;
+
+		if (arduinoPreset <= 0x0E)
+			this->m_parity = NOPARITY;
+		else if (arduinoPreset <= 0x2E)
+			this->m_parity = EVENPARITY;
+		else
+			this->m_parity = ODDPARITY;
+	}
+
 	SerialConfig::~SerialConfig() = default;
 
 	// Methods: Utilities
-	bool const SerialConfig::applyTo(HANDLE hSerial)
+	bool const SerialConfig::applyTo(const HANDLE hSerial)
 	{
 		DCB serialParams;
 		if (!GetCommState(hSerial, &serialParams))
@@ -69,7 +84,7 @@ namespace serial
 	#pragma region SerialPort class implementation
 
 	// Constructors and destructor
-	SerialPort::SerialPort(BYTE portNumber, DWORD baudRate, SerialConfig configuration)
+	SerialPort::SerialPort(const BYTE portNumber, const DWORD baudRate, const SerialConfig configuration)
 		: m_portNumber { portNumber }, m_baudRate{ baudRate }, m_configuration{ configuration } {};
 
 	SerialPort::~SerialPort()
@@ -100,7 +115,7 @@ namespace serial
 			return false;
 
 		this->m_open = true;
-		PurgeComm(this->m_hSerial, PURGE_RXCLEAR | PURGE_TXCLEAR);
+		this->purge();
 
 		return true;
 	}
@@ -118,27 +133,35 @@ namespace serial
 	}
 
 	// Methods: IO
-	DWORD const SerialPort::available()
+	size_t const SerialPort::available()
 	{
 		if (!this->m_open)
 			return 0;
 
-		COMSTAT serialStatus;
+		COMSTAT portStatus;
+		if (!ClearCommError(this->m_hSerial, NULL, &portStatus))
+			return 0;
 
-		if (!ClearCommError(this->m_hSerial, NULL, &serialStatus))
+		return portStatus.cbInQue;
+	}
+
+	bool SerialPort::purge()
+	{
+		if (!this->m_open)
 			return false;
 
-		return serialStatus.cbInQue;
+		return PurgeComm(this->m_hSerial, PURGE_RXCLEAR | PURGE_TXCLEAR);
 	}
-	
-	bool const SerialPort::read(LPVOID outBuffer, size_t byteCount)
+
+	bool SerialPort::read(const LPVOID outBuffer, const size_t byteCount)
 	{
 		if (!this->m_open)
 			return false;
 		
 		DWORD availableBytes{ this->available() };
 
-		byteCount = availableBytes >= byteCount ? byteCount : availableBytes;
+		if (byteCount > availableBytes)
+			return false;
 
 		DWORD readBytes{ 0 };
 		ReadFile(this->m_hSerial, outBuffer, byteCount, &readBytes, NULL);
@@ -146,7 +169,7 @@ namespace serial
 		return readBytes == byteCount;
 	}
 
-	bool const SerialPort::write(LPVOID inBuffer, size_t byteCount)
+	bool SerialPort::write(const LPVOID inBuffer, const size_t byteCount)
 	{
 		if (!this->m_open)
 			return false;

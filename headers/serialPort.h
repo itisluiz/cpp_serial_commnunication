@@ -11,12 +11,13 @@ namespace serial
 		BYTE m_byteSize;
 		BYTE m_parity;
 		BYTE m_stopBits;
-		bool const applyTo(HANDLE hSerial);
+		bool const applyTo(const HANDLE hSerial);
 	public:
 
 		friend class SerialPort;
-		SerialConfig(BYTE byteSize = 8, BYTE parity = NOPARITY, BYTE stopBits = ONESTOPBIT);
+		SerialConfig(const BYTE byteSize, const BYTE parity, const BYTE stopBits);
 		SerialConfig(const char* convNotation);
+		SerialConfig(const BYTE arduinoPreset);
 		~SerialConfig();
 	};
 
@@ -27,23 +28,27 @@ namespace serial
 		BYTE m_portNumber;
 		DWORD m_baudRate;
 		SerialConfig m_configuration;
-		
+
 	public:
-		SerialPort(BYTE portNumber, DWORD baudRate = CBR_9600, SerialConfig configuration = SerialConfig());
+		SerialPort(const BYTE portNumber, const DWORD baudRate = CBR_9600, const SerialConfig configuration = SerialConfig(8, NOPARITY, ONESTOPBIT));
 		~SerialPort();
-		bool const isOpen();
 		bool open();
 		bool close();
-		DWORD const available();	
-		// IO: Read
-		bool const read(LPVOID outBuffer, size_t byteCount);
-		template<typename dataType>
-		bool const read(dataType &dataOut) { return this->read(reinterpret_cast<LPVOID>(&dataOut), sizeof(dataType)); }
+		bool const isOpen();
 		
-		// IO: Write
-		bool const write(LPVOID inBuffer, size_t byteCount);
+		// IO: Misc
+		size_t const available();
+		bool purge();
+
+		// IO: Read
+		bool read(const LPVOID outBuffer, const size_t byteCount);
 		template<typename dataType>
-		bool const write(dataType& dataIn) { return this->write(reinterpret_cast<LPVOID>(&dataIn), sizeof(dataType)); }
+		bool read(dataType &dataOut) { return this->read(reinterpret_cast<LPVOID>(&dataOut), sizeof(dataType)); }
+
+		// IO: Write
+		bool write(const LPVOID inBuffer, const size_t byteCount);
+		template<typename dataType>
+		bool write(dataType& dataIn) { return this->write(reinterpret_cast<LPVOID>(&dataIn), sizeof(dataType)); }
 	};
 
 
